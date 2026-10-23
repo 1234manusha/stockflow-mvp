@@ -2,6 +2,8 @@
 const db = require("../config/db");
 
 // GET: List products belonging to the logged-in organization
+
+    
 exports.getProducts = async (req, res) => {
   try {
     const [products] = await db.execute(
@@ -11,12 +13,23 @@ exports.getProducts = async (req, res) => {
       [req.user.organizationId]
     );
 
-    res.json(products);
+    return res.status(200).json({
+      success: true,
+      message: "Products fetched successfully.",
+      data: products
+    });
   } catch (error) {
-    console.error(error);
-    res.status(500).json({ message: "Unable to fetch products" });
+    console.error("Fetch products error:", error);
+
+    return res.status(500).json({
+      success: false,
+      message: "Unable to fetch products right now. Please try again.",
+      code: "PRODUCT_FETCH_FAILED"
+    });
   }
 };
+
+
 
 // POST: Create a product
 exports.createProduct = async (req, res) => {
@@ -87,15 +100,23 @@ exports.createProduct = async (req, res) => {
       message: "Product created successfully",
       productId: result.insertId
     });
-  } catch (error) {
+  } 
+    catch(error) {
     if (error.code === "ER_DUP_ENTRY") {
       return res.status(409).json({
-        message: "This SKU already exists in your organization"
+        success: false,
+        message: "This SKU already exists. Please use a different SKU.",
+        code: "DUPLICATE_SKU"
       });
     }
 
-    console.error(error);
-    res.status(500).json({ message: "Unable to create product" });
+    console.error("Create product error:", error);
+
+    return res.status(500).json({
+      success: false,
+      message: "Unable to create the product due to a server error. Please try again.",
+      code: "PRODUCT_CREATE_FAILED"
+    });
   }
 };
 
@@ -110,6 +131,16 @@ exports.updateProduct = async (req, res) => {
     selling_price,
     low_stock_threshold
   } = req.body;
+
+  const productId = Number(req.params.id);
+
+if (!Number.isInteger(productId) || productId <= 0) {
+  return res.status(400).json({
+    success: false,
+    message: "Invalid product ID. Please provide a valid positive integer.",
+    code: "INVALID_PRODUCT_ID"
+  });
+}
 
   const qty = Number(quantity);
 
@@ -162,7 +193,7 @@ exports.updateProduct = async (req, res) => {
         low_stock_threshold == null || low_stock_threshold === ""
           ? null
           : Number(low_stock_threshold),
-        req.params.id,
+        productId,
         req.user.organizationId
       ]
     );
@@ -187,23 +218,45 @@ exports.updateProduct = async (req, res) => {
 };
 
 // DELETE: Delete a product
+
 exports.deleteProduct = async (req, res) => {
+  const productId = Number(req.params.id);
+
+  // Validate product ID
+  if (!Number.isInteger(productId) || productId <= 0) {
+    return res.status(400).json({
+      success: false,
+      message: "Invalid product ID. Please provide a valid positive integer.",
+      code: "INVALID_PRODUCT_ID"
+    });
+  }
+
   try {
     const [result] = await db.execute(
       `DELETE FROM products
        WHERE id = ? AND organization_id = ?`,
-      [req.params.id, req.user.organizationId]
+      [productId, req.user.organizationId]
     );
 
     if (result.affectedRows === 0) {
       return res.status(404).json({
-        message: "Product not found"
+        success: false,
+        message: "Product not found in your organization.",
+        code: "PRODUCT_NOT_FOUND"
       });
     }
 
-    res.json({ message: "Product deleted successfully" });
+    return res.status(200).json({
+      success: true,
+      message: "Product deleted successfully."
+    });
   } catch (error) {
-    console.error(error);
-    res.status(500).json({ message: "Unable to delete product" });
+    console.error("Delete product error:", error);
+
+    return res.status(500).json({
+      success: false,
+      message: "Unable to delete the product due to a server error. Please try again.",
+      code: "PRODUCT_DELETE_FAILED"
+    });
   }
 };

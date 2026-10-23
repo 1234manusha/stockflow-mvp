@@ -1,5 +1,5 @@
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, useMemo, useCallback } from "react";
 import { Link } from "react-router-dom";
 import api from "../services/api";
 
@@ -22,38 +22,58 @@ export default function Products() {
   const [loading, setLoading] = useState(false);
   const [defaultThreshold, setDefaultThreshold] = useState(5);
 
-  async function loadProducts() {
+  // useCallback: keep the loading function stable
+  const loadProducts = useCallback(async () => {
     try {
       const response = await api.get("/products");
-      setProducts(response.data);
+
+      // Backend returns { success, message, data: [...] }
+      const productData = response.data.data;
+
+      if (!Array.isArray(productData)) {
+        throw new Error("Invalid products response");
+      }
+
+      setProducts(productData);
       setError("");
     } catch (err) {
-      setError(err.response?.data?.message || "Unable to load products");
-    }
-  }
-
- 
-useEffect(() => {
-  loadProducts();
-
-  api.get("/settings")
-    .then((response) => {
-      setDefaultThreshold(
-        Number(response.data.default_low_stock_threshold)
+      setError(
+        err.response?.data?.message ||
+          err.message ||
+          "Unable to load products. Please try again."
       );
-    })
-    .catch((err) => {
-      console.error("Unable to load stock settings:", err);
-    });
-}, []);
+    }
+  }, []);
 
+  // Load products and settings when the component mounts
+  useEffect(() => {
+    loadProducts();
+
+    async function loadSettings() {
+      try {
+        const response = await api.get("/settings");
+        setDefaultThreshold(
+          Number(response.data.default_low_stock_threshold ?? 5)
+        );
+      } catch (err) {
+        console.error("Unable to load stock settings:", err);
+      }
+    }
+
+    loadSettings();
+  }, [loadProducts]);
 
   function handleChange(e) {
-    setForm({ ...form, [e.target.name]: e.target.value });
+    const { name, value } = e.target;
+
+    setForm((previousForm) => ({
+      ...previousForm,
+      [name]: value
+    }));
   }
 
   function resetForm() {
-    setForm(emptyForm);
+    setForm({ ...emptyForm });
     setEditingId(null);
   }
 
@@ -66,8 +86,10 @@ useEffect(() => {
       const payload = {
         ...form,
         quantity: Number(form.quantity),
-        cost_price: form.cost_price === "" ? null : Number(form.cost_price),
-        selling_price: form.selling_price === "" ? null : Number(form.selling_price),
+        cost_price:
+          form.cost_price === "" ? null : Number(form.cost_price),
+        selling_price:
+          form.selling_price === "" ? null : Number(form.selling_price),
         low_stock_threshold:
           form.low_stock_threshold === ""
             ? null
@@ -83,7 +105,10 @@ useEffect(() => {
       resetForm();
       await loadProducts();
     } catch (err) {
-      setError(err.response?.data?.message || "Unable to save product");
+      setError(
+        err.response?.data?.message ||
+          "Unable to save product. Please check your details and try again."
+      );
     } finally {
       setLoading(false);
     }
@@ -91,6 +116,7 @@ useEffect(() => {
 
   function startEdit(product) {
     setEditingId(product.id);
+
     setForm({
       name: product.name,
       sku: product.sku,
@@ -109,20 +135,34 @@ useEffect(() => {
       return;
     }
 
+    setError("");
+
     try {
       await api.delete(`/products/${id}`);
-      if (editingId === id) resetForm();
+
+      if (editingId === id) {
+        resetForm();
+      }
+
       await loadProducts();
     } catch (err) {
-      setError(err.response?.data?.message || "Unable to delete product");
+      setError(
+        err.response?.data?.message ||
+          "Unable to delete product. Please try again."
+      );
     }
   }
 
-  const filteredProducts = products.filter((product) =>
-    `${product.name} ${product.sku}`
-      .toLowerCase()
-      .includes(search.toLowerCase())
-  );
+  // useMemo: recalculate filtered products only when products or search changes
+  const filteredProducts = useMemo(() => {
+    const searchTerm = search.trim().toLowerCase();
+
+    return products.filter((product) =>
+      `${product.name} ${product.sku}`
+        .toLowerCase()
+        .includes(searchTerm)
+    );
+  }, [products, search]);
 
   return (
     <main className="page">
@@ -131,13 +171,14 @@ useEffect(() => {
           <h1>Products</h1>
           <p>Manage your inventory</p>
         </div>
+
         <nav className="nav-links">
           <Link to="/dashboard">Dashboard</Link>
           <Link to="/settings">Settings</Link>
         </nav>
       </header>
 
-      {error && <p className="error">{error}</p>}
+      {error && <p className="error" role="alert">{error}</p>}
 
       <section className="panel">
         <h2>{editingId !== null ? "Edit Product" : "Add Product"}</h2>
@@ -145,12 +186,22 @@ useEffect(() => {
         <form onSubmit={handleSubmit} className="product-form">
           <label>
             Product Name *
-            <input name="name" value={form.name} onChange={handleChange} required />
+            <input
+              name="name"
+              value={form.name}
+              onChange={handleChange}
+              required
+            />
           </label>
 
           <label>
             SKU *
-            <input name="sku" value={form.sku} onChange={handleChange} required />
+            <input
+              name="sku"
+              value={form.sku}
+              onChange={handleChange}
+              required
+            />
           </label>
 
           <label>
@@ -222,7 +273,11 @@ useEffect(() => {
             </button>
 
             {editingId !== null && (
-              <button type="button" className="secondary-button" onClick={resetForm}>
+              <button
+                type="button"
+                className="secondary-button"
+                onClick={resetForm}
+              >
                 Cancel
               </button>
             )}
@@ -260,7 +315,8 @@ useEffect(() => {
                     ? defaultThreshold
                     : Number(product.low_stock_threshold);
 
-                const lowStock = Number(product.quantity) <= threshold;
+                const lowStock =
+                  Number(product.quantity) <= threshold;
 
                 return (
                   <tr key={product.id}>
@@ -273,15 +329,21 @@ useEffect(() => {
                         : `₹${Number(product.selling_price).toFixed(2)}`}
                     </td>
                     <td>
-                      <span className={lowStock ? "status-low" : "status-ok"}>
+                      <span
+                        className={lowStock ? "status-low" : "status-ok"}
+                      >
                         {lowStock ? "Low Stock" : "In Stock"}
                       </span>
                     </td>
                     <td>
                       <div className="table-actions">
-                        <button type="button" onClick={() => startEdit(product)}>
+                        <button
+                          type="button"
+                          onClick={() => startEdit(product)}
+                        >
                           Edit
                         </button>
+
                         <button
                           type="button"
                           className="danger-button"
@@ -307,3 +369,4 @@ useEffect(() => {
     </main>
   );
 }
+
