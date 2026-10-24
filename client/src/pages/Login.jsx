@@ -9,23 +9,31 @@ export default function Login() {
   const [error, setError] = useState("");
   const navigate = useNavigate();
 
-  async function handleSubmit(e) {
-    e.preventDefault();
-    setError("");
+async function handleSubmit(e) {
+  e.preventDefault();
+  setError("");
 
-    try {
-      const response = await api.post("/auth/login", {
-        email,
-        password
-      });
+  try {
+    const response = await api.post("/auth/login", {
+      email,
+      password
+    });
 
-      localStorage.setItem("token", response.data.token);
-      navigate("/dashboard");
-    } catch (err) {
-      setError(err.response?.data?.message || "Login failed");
+    const token = response.data?.token;
+
+    if (typeof token !== "string" || !token.trim()) {
+      setError("Login response did not contain a valid token.");
+      return;
     }
-  }
 
+    localStorage.setItem("token", token);
+    navigate("/dashboard");
+  } catch (err) {
+    setError(err.response?.data?.message || "Login failed");
+  }
+}
+
+  
   return (
     <main className="auth-page">
       <form className="auth-card" onSubmit={handleSubmit}>
