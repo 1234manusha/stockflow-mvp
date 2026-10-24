@@ -10,9 +10,13 @@ export default function Dashboard() {
 
   useEffect(() => {
     api.get("/dashboard")
-      .then((response) => setData(response.data))
+      .then((response) => {
+        setData(response.data);
+      })
       .catch((err) => {
-        setError(err.response?.data?.message || "Unable to load dashboard");
+        setError(
+          err.response?.data?.message || "Unable to load dashboard"
+        );
       });
   }, []);
 
@@ -22,11 +26,21 @@ export default function Dashboard() {
   }
 
   if (error) {
-    return <main className="page"><p className="error">{error}</p>
-      <button onClick={logout}>Log out</button></main>;
+    return (
+      <main className="page">
+        <p className="error">{error}</p>
+        <button onClick={logout}>Log out</button>
+      </main>
+    );
   }
 
-  if (!data) return <main className="page">Loading dashboard...</main>;
+  if (!data) {
+    return <main className="page">Loading dashboard...</main>;
+  }
+
+  const lowStockItems = Array.isArray(data.lowStockItems)
+    ? data.lowStockItems
+    : [];
 
   return (
     <main className="page">
@@ -47,24 +61,24 @@ export default function Dashboard() {
       <section className="summary-grid">
         <article className="summary-card">
           <p>Total Products</p>
-          <h2>{data.totalProducts}</h2>
+          <h2>{data.totalProducts ?? 0}</h2>
         </article>
 
         <article className="summary-card">
           <p>Total Units in Stock</p>
-          <h2>{data.totalStock}</h2>
+          <h2>{data.totalStock ?? 0}</h2>
         </article>
 
         <article className="summary-card">
           <p>Low-Stock Products</p>
-          <h2>{data.lowStockItems.length}</h2>
+          <h2>{lowStockItems.length}</h2>
         </article>
       </section>
 
       <section className="panel">
         <h2>Low-Stock Items</h2>
 
-        {data.lowStockItems.length === 0 ? (
+        {lowStockItems.length === 0 ? (
           <p>No low-stock products. Your inventory looks good!</p>
         ) : (
           <div className="table-wrapper">
@@ -78,7 +92,7 @@ export default function Dashboard() {
                 </tr>
               </thead>
               <tbody>
-                {data.lowStockItems.map((product) => (
+                {lowStockItems.map((product) => (
                   <tr key={product.id}>
                     <td>{product.name}</td>
                     <td>{product.sku}</td>

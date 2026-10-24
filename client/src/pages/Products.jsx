@@ -286,7 +286,7 @@ export default function Products() {
       </section>
 
       <section className="panel">
-        <h2>Product List ({products.length})</h2>
+        <h2>Product List ({products?.length??0})</h2>
 
         <input
           className="search-input"
